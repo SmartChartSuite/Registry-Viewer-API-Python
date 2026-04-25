@@ -1,0 +1,854 @@
+openapi: 3.0.3
+info:
+  title: Registry Viewer API
+  description: API for registry viewer to obtain registry data
+  contact:
+    email: myung.choi@gtri.gatech.edu
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: v1.11.1
+servers:
+  - url: https://smartchartsuite.dev.heat.icl.gtri.org
+    description: Production server
+  - url: http://localhost:8080
+    description: Local development (optional)
+tags:
+  - name: case-record-api-controller
+    description: Case Record Api Controller
+  - name: llm-query-controller
+    description: Llm Query Controller
+  - name: metadata-api-controller
+    description: Metadata Api Controller
+  - name: questions-api-controller
+    description: Questions Api Controller
+  - name: search-cases-api-controller
+    description: Search Cases Api Controller
+paths:
+  /registry-viewer-api/case-record/{registry}:
+    get:
+      tags:
+        - case-record-api-controller
+      summary: searches context within a category
+      description: "By passing in the appropriate options, you can search for available cases in the registry "
+      operationId: searchCategoryUsingGET
+      parameters:
+        - name: registry
+          in: path
+          description: Registry Path
+          required: true
+          style: simple
+          schema:
+            type: string
+            pattern: "^[a-zA-Z0-9_-]+$"
+        - name: caseId
+          in: query
+          description: case-id for the category
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            format: int32
+        - name: sections
+          in: query
+          description: sections to query for the case-id
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+            description: CSV list of section identifiers
+      responses:
+        '200':
+          description: search results matching criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseData'
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+    put:
+      tags:
+        - case-record-api-controller
+      summary: Add a flag, annotation, or user data
+      description: Add a flag, annotation, or user data
+      operationId: addUserFlagAnnotationManualDataUsingPUT
+      parameters:
+        - name: registry
+          in: path
+          description: Registry Path
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: caseId
+          in: query
+          description: caseId
+          required: true
+          style: form
+          schema:
+            type: integer
+            format: int32
+        - name: contentId
+          in: query
+          description: contentId (optional, identifies content to update)
+          required: false
+          style: form
+          schema:
+            type: integer
+            format: int32
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserFlagAnnotationManualData'
+      responses:
+        '200':
+          description: requested data updated
+        '201':
+          description: requested data created
+        '400':
+          description: invalid input, object invalid
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+  /registry-viewer-api/llm-query/{registry}:
+    get:
+      tags:
+        - llm-query-controller
+      summary: query via AI
+      description: |
+          Pose the question to query the registry.
+          **Examples**
+          - Population query (no caseId):
+            `GET /registry-viewer-api/llm-query/<registry>?type=population&query=How%20many%20patients%20have%20diabetes%3F`
+          - Patient query (with caseId):
+            `GET /registry-viewer-api/llm-query/<registry>?type=patient&query=Show%20labs%20for%20this%20patient&caseId=123`
+      operationId: llmQueryUsingGET
+      parameters:
+        - name: registry
+          in: path
+          description: Registry Path
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: question to be posed
+          required: true
+          style: form
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: |
+            Question type. Must be either **population** or **patient**.
+            When set to **patient**, you may also provide `caseId` to target a specific case.
+            When set to **population**, the `caseId` parameter must be omitted.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            enum: [population, patient]
+            default: population
+        - name: caseId
+          in: query
+          description: |
+            Identifier of a specific case. **Only valid when `type=patient`.** Omit this parameter for population‑level queries.
+          required: false
+          style: form
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: AI-generated query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmResultData'
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+  /registry-viewer-api/metadata:
+    get:
+      tags:
+        - metadata-api-controller
+      summary: Getting Registry Information
+      description: Obtaining information about the availabe registries.
+      operationId: getMetadataUsingGET
+      responses:
+        '200':
+          description: List of registry metadata entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metadatas'
+              example:
+                count: 1
+                metadatas:
+                  - name: Syphilis Registry
+                    description: Registry description
+                    tag: syphilis
+                    viewerConfig: {}
+                version: 1.0.0
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+    put:
+      tags:
+        - metadata-api-controller
+      summary: Editing Registry Information
+      description: Editing registry information.
+      operationId: editMetadataUsingPUT
+      parameters:
+        - name: tag
+          in: query
+          description: tag
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Metadata'
+      responses:
+        '200':
+          description: The registry information edited
+        '201':
+          description: Created
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+    post:
+      tags:
+        - metadata-api-controller
+      summary: Adding Registry Information
+      description: Adding new registry information.
+      operationId: addMetadataUsingPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Metadata'
+      responses:
+        '200':
+          description: OK
+        '201':
+          description: New registry information added
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+  /registry-viewer-api/questions/{registry}:
+    get:
+      tags:
+        - questions-api-controller
+      summary: Get list of questions
+      description: Obtain list of questions within a section 
+      operationId: getQuestionsUsingGET
+      parameters:
+        - name: registry
+          in: path
+          description: Registry Path
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: section
+          in: query
+          description: section that we are interested.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: list of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Question'
+              example:
+                - conceptId: 1
+                  section: LabResults
+                  category: Syphilis
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+  /registry-viewer-api/search-cases/{registry}:
+    get:
+      tags:
+        - search-cases-api-controller
+      summary: searches cases
+      description: "By passing in the appropriate options, you can search for available cases in the registry "
+      operationId: searchCasesUsingGET
+      parameters:
+        - name: registry
+          in: path
+          description: Registry Path
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: terms
+          in: query
+          description: search terms for cases
+          required: false
+          style: form
+          schema:
+            type: string
+        - name: fields
+          in: query
+          description: search columns for cases
+          required: false
+          style: form
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results matching criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cases'
+              example:
+                count: 2
+                cases:
+                  - caseId: 1234
+                    firstName: Patch
+                    lastName: Adams
+                    city: Torrance
+                    state: GA
+                    zip: '30043'
+                    status:
+                      code: active
+                      detail: Case is running in normal mode.
+                      activatedDateTime: '2022-01-01T12:00:00Z'
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+      security:
+        - Authorization: []
+        - basicAuth: []
+components:
+  securitySchemes:
+    Authorization:
+      type: apiKey
+      name: Authorization
+      in: header
+      description: API key passed in the `Authorization` header (e.g., `Bearer <token>`)
+    basicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic authentication (optional)
+  schemas:
+    Error:
+      type: object
+      description: Generic error response
+      properties:
+        code:
+          type: integer
+          format: int32
+          example: 400
+        message:
+          type: string
+          example: Invalid request parameters
+      required:
+        - code
+        - message
+    Annotation:
+      title: Annotation
+      type: object
+      properties:
+        annotationId:
+          type: integer
+          format: int32
+          example: 1
+        date:
+          type: string
+          format: date-time
+          example: '2024-01-04T05:00:00Z'
+        text:
+          type: string
+          example: will be deleted if annotationId is valid but text is empty
+    CaseData:
+      title: CaseData
+      type: object
+      properties:
+        caseId:
+          type: integer
+          format: int32
+          example: 1
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Content'
+        count:
+          type: integer
+          format: int32
+          example: 1
+    Cases:
+      title: Cases
+      type: object
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelCase'
+        count:
+          type: integer
+          format: int32
+          example: 1
+    Coding:
+      title: Coding
+      type: object
+      properties:
+        code:
+          type: string
+          example: 20507-0
+        display:
+          type: string
+          example: Reagin Ab [Presence] in Serum by RPR
+        system:
+          type: string
+          example: LOINC
+    Content:
+      title: Content
+      type: object
+      properties:
+        annotation:
+          type: array
+          items:
+            $ref: '#/components/schemas/Annotation'
+        category:
+          type: string
+          example: Syphilis
+        contentId:
+          type: integer
+          format: int32
+          example: 1
+        date:
+          type: string
+          format: date-time
+          example: '2022-01-14T05:00:00Z'
+        derivedValue:
+          $ref: '#/components/schemas/Value'
+        details:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/DetailCondition'
+              - $ref: '#/components/schemas/DetailMedication'
+              - $ref: '#/components/schemas/DetailObservation'
+              - $ref: '#/components/schemas/DetailMeasurement'
+              - $ref: '#/components/schemas/DetailNote'
+              - $ref: '#/components/schemas/DetailUserData'
+        flag:
+          type: string
+          example: flag1
+        question:
+          type: string
+          example: Lab Result
+        section:
+          type: string
+          example: LabResults
+        sourceValue:
+          $ref: '#/components/schemas/Value'
+    DetailBase:
+      type: object
+      properties:
+        code:
+          type: string
+          example: 20507-0
+        display:
+          type: string
+          example: Reagin Ab [Presence] in Serum by RPR
+        startDate:
+          type: string
+          format: date-time
+          example: '2022-01-14T05:00:00Z'
+        endDate:
+          type: string
+          format: date-time
+          example: '2022-01-14T05:00:00Z'
+        system:
+          type: string
+          example: LOINC
+        tableDisplayText:
+          type: string
+          example: Reagin Ab [Presence] in Serum by RPR | value
+    DetailCondition:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+    DetailMeasurement:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+        - type: object
+          properties:
+            date:
+              type: string
+              format: date-time
+              example: '2022-01-14T05:00:00Z'
+            rangeHigh:
+              type: integer
+              format: int32
+              example: 5
+            rangeLow:
+              type: integer
+              format: int32
+              example: 1
+            unit:
+              type: string
+            value:
+              type: string
+              example: Reactive
+    DetailMedication:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+        - type: object
+          properties:
+            daysSupply:
+              type: integer
+              format: int32
+              example: 30
+            lotNumber:
+              type: string
+              example: lot number
+            quantity:
+              type: integer
+              format: int32
+              example: 5
+            refills:
+              type: integer
+              format: int32
+              example: 2
+            route_code:
+              type: string
+              example: 1234-5
+            route_display:
+              type: string
+              example: route text info
+            route_system:
+              type: string
+            sig:
+              type: string
+            startDate:
+              type: string
+              format: date-time
+              example: '2022-01-14T05:00:00Z'
+    DetailNote:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+        - type: object
+          properties:
+            noteText:
+              type: string
+              example: Reactive
+    DetailObservation:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+        - type: object
+          properties:
+            unit:
+              type: string
+            value:
+              type: string
+              example: Reactive
+    DetailUserData:
+      allOf:
+        - $ref: '#/components/schemas/DetailBase'
+    JsonNode:
+      title: JsonNode
+      type: object
+    LlmResultData:
+      title: LlmResultData
+      type: object
+      properties:
+        images:
+          type: array
+          format: byte
+          example: iVBORw0KGgoAAAANSUhEUgAAAAUAAA...
+          items:
+            type: string
+        interpretation:
+          type: string
+          example: There are approximately 2 records matching the criteria in the results
+        patients:
+          type: array
+          description: List of cases
+          items:
+            $ref: '#/components/schemas/ModelCase'
+        query:
+          type: string
+          description: Original question from Viewer
+          example: give me all the patients with diabetes
+        queryType:
+          type: string
+          description: Running a query in a population or patient type
+          example: population
+    ManualCaseData:
+      title: ManualCaseData
+      type: object
+      properties:
+        conceptId:
+          type: integer
+          format: int32
+          example: 1
+        date:
+          type: string
+          format: date-time
+          example: '2024-01-04T05:00:00Z'
+        value:
+          type: string
+          example: user-entered value
+    Metadata:
+      title: Metadata
+      type: object
+      properties:
+        description:
+          type: string
+          example: Registry description
+        name:
+          type: string
+          example: Syphilis Registry
+        tag:
+          type: string
+          example: Registry tag name
+        viewerConfig:
+          $ref: '#/components/schemas/JsonNode'
+          example: Registry Viewer UI Config
+    Metadatas:
+      title: Metadatas
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int32
+          example: 1
+        metadatas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metadata'
+        version:
+          type: string
+          example: 1.0.0
+    ModelCase:
+      title: ModelCase
+      type: object
+      properties:
+        caseId:
+          type: integer
+          format: int32
+          example: 1234
+        city:
+          type: string
+          example: Torrance
+        dob:
+          type: string
+          format: date
+          example: '2022-01-14'
+        firstName:
+          type: string
+          example: Patch
+        gender:
+          type: string
+          example: Male
+        initialReportDate:
+          type: string
+          format: date-time
+          example: '2020-05-15T20:30:00Z'
+        lastName:
+          type: string
+          example: Adams
+        phone:
+          type: string
+          example: 123-456-7890
+        state:
+          type: string
+          example: GA
+        status:
+          $ref: '#/components/schemas/Status'
+        street:
+          type: string
+          example: 5 Fulton Hill
+        zip:
+          type: string
+          example: '30043'
+    Status:
+      title: Status
+      type: object
+      properties:
+        activatedDateTime:
+          type: string
+          format: date-time
+          description: Date and time when the case was activated
+          example: '2011-12-03T00:00:00Z'
+        caseStartedRunningDateTime:
+          type: string
+          format: date-time
+          description: Date and time when case started running
+          example: '2011-12-03T00:00:00Z'
+        code:
+          type: string
+          description: Status code in Registry for User
+          example: information
+        createdDateTime:
+          type: string
+          format: date-time
+          description: Date and time when the case was created
+          example: '2011-12-03T00:00:00Z'
+        detail:
+          type: string
+          description: Detail description of status.
+          example: Case is running in normal mode.
+        lastSuccessfulDateTime:
+          type: string
+          format: date-time
+          description: Date and time of the last successful operation
+          example: '2011-12-03T00:00:00Z'
+        nextScheduledDateTime:
+          type: string
+          format: date-time
+          description: Next scheduled execution date and time
+          example: '2011-12-03T00:00:00Z'
+    UserFlagAnnotationManualData:
+      title: UserFlagAnnotationManualData
+      type: object
+      properties:
+        annotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Annotation'
+        flag:
+          type: string
+          example: Invalid Entry
+        manualCaseData:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManualCaseData'
+    Value:
+      title: Value
+      type: object
+      properties:
+        coding:
+          $ref: '#/components/schemas/Coding'
+        unit:
+          type: string
+          example: unit if value is numeric
+        value:
+          type: string
+          example: Reactive
+    Question:
+      title: Question
+      type: object
+      properties:
+        conceptId:
+          type: integer
+          format: int32
+          example: 1
+        section:
+          type: string
+          example: LabResults
+        category:
+          type: string
+          example: Syphilis
+
