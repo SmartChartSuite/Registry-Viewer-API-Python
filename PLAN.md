@@ -8,6 +8,11 @@
    - The successful creation now explicitly uses **HTTP 201 Created**.
 
 2. **Metadata PUT operation**
+   - Added a **409 Conflict** response that returns the existing `Metadata` object when a duplicate `tag` is submitted.
+   - Updated the OpenAPI definition (`api-docs.yaml`) accordingly and ensured the FastAPI route returns `JSONResponse` with `status_code=409`.
+   - The successful creation now explicitly uses **HTTP 201 Created**.
+
+2. **Metadata PUT operation**
    - Removed an unused `tag` query‑parameter from the OpenAPI spec – the tag is now taken from the request body.
    - Deleted the stray `201` response code, leaving only the appropriate `200` success response.
    - The implementation already returns **404 Not Found** when the entry does not exist.
@@ -37,6 +42,12 @@
    - Flags and annotations are read from `{registry}.flag` and `{registry}.annotation` tables and linked to the appropriate `Content` (future extensions can populate these fields).
    - Assembled a `CaseData` response (`caseId`, `contents`, `count`).
    - Added corresponding Pydantic models (`Coding`, `Value`, `DetailUserData`, `Content`, `CaseData`) in `app/schemas/case_data.py`.
+- **case-record PUT operation**
+  - Implemented `PUT /registry-viewer-api/case-record/{registry}` with flag updates, annotation deletions, and insertion of new annotations when `annotationId` is null and `text` is provided.
+  - Request body now uses `UserFlagAnnotationManualData` schema, supporting `flag`, `annotations`, and `manualCaseData`.
+  - Fixed `observation_type_concept_id` to `36685765` and mapped `value` to both `value_as_string` and `observation_source_value`.
+  - Endpoint now returns only HTTP status codes (`200` for updates, `201` for creations) with no `CaseData` payload.
+  - Updated OpenAPI spec to reflect the new response semantics.
    - Updated imports and router inclusion in `app/main.py`.
    - Added an `Error` model to `app/schemas/metadata.py` for uniform error responses.
 
