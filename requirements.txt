@@ -1,1 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[async]
+asyncpg
+aiosqlite
 python-dotenv
+pyyaml>=6.0
+httpx
+PyJWT
+greenlet

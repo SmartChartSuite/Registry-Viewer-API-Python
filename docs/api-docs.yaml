@@ -249,15 +249,7 @@ paths:
       summary: Editing Registry Information
       description: Editing registry information.
       operationId: editMetadataUsingPUT
-      parameters:
-        - name: tag
-          in: query
-          description: tag
-          required: true
-          style: form
-          explode: true
-          schema:
-            type: string
+
       requestBody:
         content:
           application/json:
@@ -266,8 +258,6 @@ paths:
       responses:
         '200':
           description: The registry information edited
-        '201':
-          description: Created
         '400':
           description: Bad request – invalid parameters
           content:
@@ -295,10 +285,7 @@ paths:
             schema:
               $ref: '#/components/schemas/Metadata'
       responses:
-        '200':
-          description: OK
-        '201':
-          description: New registry information added
+
         '400':
           description: Bad request – invalid parameters
           content:
@@ -311,10 +298,60 @@ paths:
           description: Forbidden
         '404':
           description: Not Found
+        '409':
+          description: Conflict – entry with same tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metadata'
       security:
         - Authorization: []
         - basicAuth: []
+
+
+    delete:
+      tags:
+        - metadata-api-controller
+      summary: Delete Registry Information
+      description: Delete a metadata entry by its tag.
+      operationId: deleteMetadataUsingDELETE
+      parameters:
+        - name: tag
+          in: query
+          description: Tag of the metadata to delete
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Metadata entry successfully deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metadata'
+        '404':
+          description: Metadata entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '400':
+          description: Bad request – invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - Authorization: []
+        - basicAuth: []
+
+
   /registry-viewer-api/questions/{registry}:
+
     get:
       tags:
         - questions-api-controller
@@ -851,4 +888,7 @@ components:
         category:
           type: string
           example: Syphilis
+        text:
+          type: string
+          example: Lab Results
 
