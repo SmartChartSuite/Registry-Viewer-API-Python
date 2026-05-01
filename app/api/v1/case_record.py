@@ -1,13 +1,13 @@
 import os
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 
 from fastapi import APIRouter, Path, Query, Depends, HTTPException, Body, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_async_session
-from app.schemas.case_data import CaseData, Content, Value, Coding, DetailUserData
+from app.schemas.case_data import CaseData, Content, Value, Coding, DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement
 from app.schemas.manual_case_data import ManualCaseData
 from app.schemas.user_flag_annotation_manual_data import UserFlagAnnotationManualData
 from app.schemas.metadata import Error
@@ -75,34 +75,37 @@ def parse_observation_value(raw: str) -> dict:
     return result
 
 # ---------------------------------------------------------------------------
-# Helper: fetch DetailUserData for a batch of content IDs
+# Helper: fetch details for a batch of content IDs with conditional logic based on domain_concept_id_2
 # ---------------------------------------------------------------------------
 async def fetch_details(
     db: AsyncSession,
     registry_schema: str,
     content_ids: List[int],
-) -> Dict[int, List[DetailUserData]]:
-    """Return a mapping content_id → list of DetailUserData.
+) -> Dict[int, List[Union[DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement]]]:
+    """Return a mapping content_id → list of detail objects based on domain_concept_id_2.
 
-    The query joins fact_relationship with observation (by fact_id_1) and filters on
-    relationship_concept_id = 44818759.
+    For each content_id, fetches related fact_relationship rows and maps them to appropriate detail schemas:
+    - If no facts: fallback to DetailUserData with derivedValue as tableDisplayText
+    - domain_concept_id_2 = 13 → DetailMedication (drug_exposure + concept joins)
+    - domain_concept_id_2 = 19 → DetailCondition (condition_occurrence + concept join)
+    - domain_concept_id_2 = 27 → DetailObservation (observation + concept joins)
+    - domain_concept_id_2 = 21 → DetailMeasurement (measurement + concept joins)
+    - domain_concept_id_2 = 5085 → DetailNote (note + concept join)
+    - Other values: skip
     """
     if not content_ids:
         return {}
 
-    # Build the query using raw SQL for clarity; SQLAlchemy Core could be used as well.
+    # Build the query to get all relevant fact_relationship rows
     sql = text(f"""
         SELECT
             fr.domain_concept_id_1,
             fr.fact_id_1,
             fr.domain_concept_id_2,
             fr.fact_id_2,
-            fr.relationship_concept_id,
-            o.observation_id AS content_id
+            fr.relationship_concept_id
         FROM {registry_schema}.fact_relationship AS fr
-        JOIN {registry_schema}.observation AS o
-          ON o.observation_id = fr.fact_id_1
-        WHERE o.observation_id = ANY(:content_ids)
+        WHERE fr.fact_id_1 = ANY(:content_ids)
           AND fr.relationship_concept_id = 44818759;
     """)
     result = await db.execute(
@@ -111,17 +114,66 @@ async def fetch_details(
     )
     rows = result.fetchall()
 
-    mapping: Dict[int, List[DetailUserData]] = {}
+    # Group facts by content_id (fact_id_1)
+    facts_by_content: Dict[int, List[Dict]] = {}
     for row in rows:
-        content_id = row[5]
-        detail = DetailUserData(
-            domainConceptId1=row[0],
-            factId1=row[1],
-            domainConceptId2=row[2],
-            factId2=row[3],
-            relationshipConceptId=row[4],
-        )
-        mapping.setdefault(content_id, []).append(detail)
+        content_id = row[1]  # fact_id_1
+        fact_dict = {
+            "domain_concept_id_1": row[0],
+            "fact_id_1": row[1],
+            "domain_concept_id_2": row[2],
+            "fact_id_2": row[3],
+            "relationship_concept_id": row[4],
+        }
+        facts_by_content.setdefault(content_id, []).append(fact_dict)
+
+    # Process each content_id
+    mapping: Dict[int, List[Union[DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement]]] = {}
+    
+    for content_id in content_ids:
+        facts = facts_by_content.get(content_id, [])
+        
+        if not facts:
+            # No facts found - this will be handled in the calling function with derivedValue fallback
+            mapping[content_id] = []
+            continue
+            
+        details: List[Union[DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement]] = []
+        
+        for fact in facts:
+            domain_concept_id_2 = fact["domain_concept_id_2"]
+            fact_id_2 = fact["fact_id_2"]
+            
+            # Route to appropriate detail handler based on domain_concept_id_2
+            if domain_concept_id_2 == 13:
+                # DetailMedication
+                detail = await _get_medication_detail(db, registry_schema, fact_id_2)
+                if detail:
+                    details.append(detail)
+            elif domain_concept_id_2 == 19:
+                # DetailCondition
+                detail = await _get_condition_detail(db, registry_schema, fact_id_2)
+                if detail:
+                    details.append(detail)
+            elif domain_concept_id_2 == 27:
+                # DetailObservation
+                detail = await _get_observation_detail(db, registry_schema, fact_id_2)
+                if detail:
+                    details.append(detail)
+            elif domain_concept_id_2 == 21:
+                # DetailMeasurement
+                detail = await _get_measurement_detail(db, registry_schema, fact_id_2)
+                if detail:
+                    details.append(detail)
+            elif domain_concept_id_2 == 5085:
+                # DetailNote
+                detail = await _get_note_detail(db, registry_schema, fact_id_2)
+                if detail:
+                    details.append(detail)
+            # Other domain_concept_id_2 values are skipped as per requirements
+            
+        mapping[content_id] = details
+        
     return mapping
 
     # -------------------------------------------------------------------
@@ -320,7 +372,7 @@ async def get_case_record(
     for row in obs_rows:
         observation_id = row[0]
         content_ids.append(observation_id)
-        raw_value = row[4]  # value_as_string
+        raw_value = row[3]  # value_as_string
         parsed = parse_observation_value(raw_value)
 
         # Build derivedValue (Value model)
@@ -344,6 +396,21 @@ async def get_case_record(
         if section == "Demographics":
             continue
             
+        # Parse observation_source_value the same way as observation.value_as_string
+        source_value_parsed = parse_observation_value(row[4])  # row[4] is observation_source_value
+        source_value_coding = None
+        if source_value_parsed.get("system") or source_value_parsed.get("code") or source_value_parsed.get("display"):
+            source_value_coding = Coding(
+                system=source_value_parsed.get("system"),
+                code=source_value_parsed.get("code"),
+                display=source_value_parsed.get("display"),
+            )
+        source_value = Value(
+            coding=source_value_coding,
+            unit=source_value_parsed.get("unit"),
+            value=source_value_parsed.get("value"),
+        )
+
         content = Content(
             contentId=observation_id,
             date=parsed.get("date"),
@@ -351,7 +418,8 @@ async def get_case_record(
             section=section,
             question=meta.get("question"),
             derivedValue=derived,
-            # flag, sourceValue, etc. can be added later if needed.
+            sourceValue=source_value,
+            # flag, etc. can be added later if needed.
         )
         contents.append(content)
 
@@ -551,3 +619,231 @@ async def put_case_record(
     if body.manualCaseData:
         return Response(status_code=201)
     return Response(status_code=200)
+
+# ---------------------------------------------------------------------------
+# Helper methods for detail type extraction
+# ---------------------------------------------------------------------------
+async def _get_medication_detail(
+    db: AsyncSession,
+    registry_schema: str,
+    drug_exposure_id: int,
+) -> Optional[DetailMedication]:
+    """Fetch medication detail by joining drug_exposure with concept tables."""
+    sql = text(f"""
+        SELECT
+            de.drug_exposure_id,
+            de.days_supply,
+            de.lot_number,
+            de.quantity,
+            de.refills,
+            c_route.concept_code AS route_code,
+            c_route.concept_name AS route_display,
+            c_route.vocabulary_id AS route_system,
+            de.sig,
+            de.drug_exposure_start_date AS startDate
+        FROM {registry_schema}.drug_exposure AS de
+        LEFT JOIN {VOCAB_SCHEMA}.concept AS c_route
+            ON de.route_concept_id = c_route.concept_id
+        WHERE de.drug_exposure_id = :drug_exposure_id
+    """)
+    result = await db.execute(sql, {"drug_exposure_id": drug_exposure_id})
+    row = result.fetchone()
+    if not row:
+        return None
+        
+    return DetailMedication(
+        daysSupply=row[1],
+        lotNumber=row[2],
+        quantity=row[3],
+        refills=row[4],
+        routeCode=row[5],
+        routeDisplay=row[6],
+        routeSystem=row[7],
+        sig=row[8],
+        startDate=row[9].isoformat() if row[9] else None,
+    )
+
+
+async def _get_condition_detail(
+    db: AsyncSession,
+    registry_schema: str,
+    condition_occurrence_id: int,
+) -> Optional[DetailCondition]:
+    """Fetch condition detail by joining condition_occurrence with concept table."""
+    sql = text(f"""
+        SELECT
+            co.condition_occurrence_id,
+            co.condition_start_date,
+            co.condition_end_date,
+            co.condition_type_concept_id,
+            c.concept_code,
+            c.concept_name,
+            c.vocabulary_id
+        FROM {registry_schema}.condition_occurrence AS co
+        JOIN {VOCAB_SCHEMA}.concept AS c
+            ON co.condition_concept_id = c.concept_id
+        WHERE co.condition_occurrence_id = :condition_occurrence_id
+    """)
+    result = await db.execute(sql, {"condition_occurrence_id": condition_occurrence_id})
+    row = result.fetchone()
+    if not row:
+        return None
+        
+    return DetailCondition(
+        domainConceptId1=row[1],  # condition_start_date
+        factId1=row[2],           # condition_end_date
+        domainConceptId2=row[3],  # condition_type_concept_id
+        factId2=row[4],           # concept_code
+        relationshipConceptId=row[5],  # concept_name
+        tableDisplayText=f"{row[6]}: {row[4]}" if row[4] and row[6] else None,
+    )
+
+
+async def _get_observation_detail(
+    db: AsyncSession,
+    registry_schema: str,
+    observation_id: int,
+) -> Optional[DetailObservation]:
+    """Fetch observation detail with concept names for tableDisplayText."""
+    sql = text(f"""
+        SELECT
+            o.observation_id,
+            o.unit_as_string,
+            o.value_as_string,
+            c_obs.concept_name AS observation_concept_name,
+            c_value.concept_name AS value_as_concept_name,
+            o.value_as_number,
+            o.unit_as_string
+        FROM {registry_schema}.observation AS o
+        JOIN {VOCAB_SCHEMA}.concept AS c_obs
+            ON o.observation_concept_id = c_obs.concept_id
+        LEFT JOIN {VOCAB_SCHEMA}.concept AS c_value
+            ON o.value_as_concept_id = c_value.concept_id
+        WHERE o.observation_id = :observation_id
+    """)
+    result = await db.execute(sql, {"observation_id": observation_id})
+    row = result.fetchone()
+    if not row:
+        return None
+        
+    # Build tableDisplayText per requirements
+    table_display_parts = []
+    
+    # Add value_as_concept_name if exists
+    if row[4]:  # value_as_concept_name
+        table_display_parts.append(row[4])
+    
+    # Always add observation concept name
+    if row[3]:  # observation_concept_name
+        table_display_parts.append(row[3])
+    
+    # Add value_as_number and unit if value_as_number exists
+    if row[5] is not None:  # value_as_number
+        table_display_parts.append(str(row[5]))
+        if row[6]:  # unit
+            table_display_parts.append(row[6])
+    
+    # Add value_as_string if exists
+    if row[2]:  # value_as_string
+        table_display_parts.append(row[2])
+    
+    table_display_text = " | ".join(table_display_parts) if table_display_parts else None
+    
+    return DetailObservation(
+        unit=row[1],  # unit_as_string
+        value=row[2],  # value_as_string
+        tableDisplayText=table_display_text,
+    )
+
+
+async def _get_note_detail(
+    db: AsyncSession,
+    registry_schema: str,
+    note_id: int,
+) -> Optional[DetailNote]:
+    """Fetch note detail by joining note with concept table."""
+    sql = text(f"""
+        SELECT
+            n.note_id,
+            n.note_text
+        FROM {registry_schema}.note AS n
+        JOIN {VOCAB_SCHEMA}.concept AS c
+            ON n.note_type_concept_id = c.concept_id
+        WHERE n.note_id = :note_id
+    """)
+    result = await db.execute(sql, {"note_id": note_id})
+    row = result.fetchone()
+    if not row:
+        return None
+        
+    return DetailNote(
+        noteText=row[1],
+    )
+
+
+async def _get_measurement_detail(
+    db: AsyncSession,
+    registry_schema: str,
+    measurement_id: int,
+) -> Optional[DetailMeasurement]:
+    """Fetch measurement detail with concept names for tableDisplayText."""
+    sql = text(f"""
+        SELECT
+            m.measurement_id,
+            m.range_high,
+            m.range_low,
+            m.unit_as_string,
+            m.value_as_string,
+            m.value_as_number,
+            m.operator_concept_id,
+            c_meas.concept_name AS measurement_concept_name,
+            c_value.concept_name AS value_as_concept_name,
+            c_unit.concept_name AS unit_concept_name,
+            c_operator.concept_name AS operator_concept_name
+        FROM {registry_schema}.measurement AS m
+        JOIN {VOCAB_SCHEMA}.concept AS c_meas
+            ON m.measurement_concept_id = c_meas.concept_id
+        LEFT JOIN {VOCAB_SCHEMA}.concept AS c_value
+            ON m.value_as_concept_id = c_value.concept_id
+        LEFT JOIN {VOCAB_SCHEMA}.concept AS c_unit
+            ON m.unit_concept_id = c_unit.concept_id
+        LEFT JOIN {VOCAB_SCHEMA}.concept AS c_operator
+            ON m.operator_concept_id = c_operator.concept_id
+        WHERE m.measurement_id = :measurement_id
+    """)
+    result = await db.execute(sql, {"measurement_id": measurement_id})
+    row = result.fetchone()
+    if not row:
+        return None
+        
+    # Build tableDisplayText per requirements
+    table_display_parts = []
+    
+    # Add value_as_concept_name if exists
+    if row[7]:  # value_as_concept_name
+        table_display_parts.append(row[7])
+    
+    # Add value_as_number with operator concept name if exists
+    if row[5] is not None:  # value_as_number
+        if row[10]:  # operator_concept_name
+            table_display_parts.append(f"{row[10]} {row[5]}")
+        else:
+            table_display_parts.append(str(row[5]))
+        
+        # Add unit if exists
+        if row[3]:  # unit_as_string
+            table_display_parts.append(row[3])
+    
+    # Add value_as_string if exists
+    if row[4]:  # value_as_string
+        table_display_parts.append(row[4])
+    
+    table_display_text = " | ".join(table_display_parts) if table_display_parts else None
+    
+    return DetailMeasurement(
+        rangeHigh=row[1],  # range_high
+        rangeLow=row[2],   # range_low
+        unit=row[3],       # unit_as_string
+        value=row[4],      # value_as_string
+        tableDisplayText=table_display_text,
+    )

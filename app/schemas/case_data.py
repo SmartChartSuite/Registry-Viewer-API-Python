@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -49,6 +49,78 @@ class DetailUserData(DetailBase):
     """
     pass
 
+
+# ---------------------------------------------------------------------------
+# DetailMedication schema
+# ---------------------------------------------------------------------------
+class DetailMedication(DetailBase):
+    daysSupply: Optional[int] = None
+    lotNumber: Optional[str] = None
+    quantity: Optional[int] = None
+    refills: Optional[int] = None
+    routeCode: Optional[str] = Field(None, alias="route_code")
+    routeDisplay: Optional[str] = Field(None, alias="route_display")
+    routeSystem: Optional[str] = Field(None, alias="route_system")
+    sig: Optional[str] = None
+    startDate: Optional[str] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DetailObservation schema
+# ---------------------------------------------------------------------------
+class DetailObservation(DetailBase):
+    unit: Optional[str] = None
+    value: Optional[str] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DetailNote schema
+# ---------------------------------------------------------------------------
+class DetailNote(DetailBase):
+    noteText: Optional[str] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DetailCondition schema
+# ---------------------------------------------------------------------------
+class DetailCondition(DetailBase):
+    pass  # Inherits all fields from DetailBase
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DetailMeasurement schema
+# ---------------------------------------------------------------------------
+class DetailMeasurement(DetailBase):
+    rangeHigh: Optional[int] = None
+    rangeLow: Optional[int] = None
+    unit: Optional[str] = None
+    value: Optional[str] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
 # ---------------------------------------------------------------------------
 # Content – represents a single observation's payload
 # ---------------------------------------------------------------------------
@@ -59,8 +131,9 @@ class Content(BaseModel):
     section: Optional[str] = None
     question: Optional[str] = None
     derivedValue: Optional[Value] = None
-    details: Optional[List[DetailUserData]] = None
-    # Additional fields from the full spec (annotation, flag, sourceValue, etc.)
+    details: Optional[List[Union[DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement]]] = None
+    sourceValue: Optional[Value] = None
+    # Additional fields from the full spec (annotation, flag, etc.)
     # are omitted here for brevity; they can be added later if needed.
 
     model_config = ConfigDict(
