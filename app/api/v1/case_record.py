@@ -640,7 +640,7 @@ async def _get_medication_detail(
             c_route.concept_name AS route_display,
             c_route.vocabulary_id AS route_system,
             de.sig,
-            de.drug_exposure_start_date AS startDate
+            de.drug_exposure_start_date AS start_date
         FROM {registry_schema}.drug_exposure AS de
         LEFT JOIN {VOCAB_SCHEMA}.concept AS c_route
             ON de.route_concept_id = c_route.concept_id
@@ -652,15 +652,15 @@ async def _get_medication_detail(
         return None
         
     return DetailMedication(
+        code=row[5],  # route_code
+        display=row[6],  # route_display
+        system=row[7],  # route_system
+        startDate=row[9].isoformat() if row[9] else None,
         daysSupply=row[1],
         lotNumber=row[2],
         quantity=row[3],
         refills=row[4],
-        routeCode=row[5],
-        routeDisplay=row[6],
-        routeSystem=row[7],
         sig=row[8],
-        startDate=row[9].isoformat() if row[9] else None,
     )
 
 
@@ -689,13 +689,16 @@ async def _get_condition_detail(
     if not row:
         return None
         
+    # Build tableDisplayText: concept_name: concept_code
+    table_display_text = f"{row[5]}: {row[4]}" if row[4] and row[5] else None
+    
     return DetailCondition(
-        domainConceptId1=row[1],  # condition_start_date
-        factId1=row[2],           # condition_end_date
-        domainConceptId2=row[3],  # condition_type_concept_id
-        factId2=row[4],           # concept_code
-        relationshipConceptId=row[5],  # concept_name
-        tableDisplayText=f"{row[6]}: {row[4]}" if row[4] and row[6] else None,
+        code=row[4],  # concept_code
+        display=row[5],  # concept_name
+        system=row[6],  # vocabulary_id
+        startDate=row[1].isoformat() if row[1] else None,
+        endDate=row[2].isoformat() if row[2] else None,
+        tableDisplayText=table_display_text,
     )
 
 
@@ -750,9 +753,14 @@ async def _get_observation_detail(
     table_display_text = " | ".join(table_display_parts) if table_display_parts else None
     
     return DetailObservation(
+        code=None,  # Not applicable for observation detail
+        display=row[4] or row[3],  # value_as_concept_name or observation_concept_name
+        system=None,  # Not applicable for observation detail
+        startDate=None,  # Not applicable for observation detail
+        endDate=None,  # Not applicable for observation detail
+        tableDisplayText=table_display_text,
         unit=row[1],  # unit_as_string
         value=row[2],  # value_as_string
-        tableDisplayText=table_display_text,
     )
 
 
@@ -765,7 +773,10 @@ async def _get_note_detail(
     sql = text(f"""
         SELECT
             n.note_id,
-            n.note_text
+            n.note_text,
+            c.concept_code,
+            c.concept_name,
+            c.vocabulary_id
         FROM {registry_schema}.note AS n
         JOIN {VOCAB_SCHEMA}.concept AS c
             ON n.note_type_concept_id = c.concept_id
@@ -777,6 +788,12 @@ async def _get_note_detail(
         return None
         
     return DetailNote(
+        code=row[2],  # concept_code
+        display=row[3],  # concept_name
+        system=row[4],  # vocabulary_id
+        startDate=None,  # Not applicable for note detail
+        endDate=None,  # Not applicable for note detail
+        tableDisplayText=row[1],  # note_text
         noteText=row[1],
     )
 
@@ -796,6 +813,7 @@ async def _get_measurement_detail(
             m.value_as_string,
             m.value_as_number,
             m.operator_concept_id,
+            m.measurement_date,
             c_meas.concept_name AS measurement_concept_name,
             c_value.concept_name AS value_as_concept_name,
             c_unit.concept_name AS unit_concept_name,
@@ -820,13 +838,13 @@ async def _get_measurement_detail(
     table_display_parts = []
     
     # Add value_as_concept_name if exists
-    if row[7]:  # value_as_concept_name
-        table_display_parts.append(row[7])
+    if row[9]:  # value_as_concept_name
+        table_display_parts.append(row[9])
     
     # Add value_as_number with operator concept name if exists
     if row[5] is not None:  # value_as_number
-        if row[10]:  # operator_concept_name
-            table_display_parts.append(f"{row[10]} {row[5]}")
+        if row[11]:  # operator_concept_name
+            table_display_parts.append(f"{row[11]} {row[5]}")
         else:
             table_display_parts.append(str(row[5]))
         
@@ -840,10 +858,27 @@ async def _get_measurement_detail(
     
     table_display_text = " | ".join(table_display_parts) if table_display_parts else None
     
+    # Determine display value
+    display_value = None
+    if row[9]:  # value_as_concept_name
+        display_value = row[9]
+    elif row[11] and row[5] is not None:  # operator_concept_name and value_as_number
+        display_value = f"{row[11]} {row[5]}"
+    elif row[5] is not None:  # value_as_number only
+        display_value = str(row[5])
+    elif row[4]:  # value_as_string
+        display_value = row[4]
+    
     return DetailMeasurement(
+        code=None,  # Not applicable for measurement detail
+        display=display_value,
+        system=None,  # Not applicable for measurement detail
+        startDate=row[7].isoformat() if row[7] else None,  # measurement_date
+        endDate=None,  # Not applicable for measurement detail
+        tableDisplayText=table_display_text,
         rangeHigh=row[1],  # range_high
         rangeLow=row[2],   # range_low
         unit=row[3],       # unit_as_string
         value=row[4],      # value_as_string
-        tableDisplayText=table_display_text,
+        date=row[7].isoformat() if row[7] else None,  # measurement_date
     )

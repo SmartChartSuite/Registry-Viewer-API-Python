@@ -25,22 +25,19 @@ class Value(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 # ---------------------------------------------------------------------------
-# Detail schemas – we only need DetailUserData for this endpoint.
-# The OpenAPI spec defines a DetailBase with a tableDisplayText field; we
-# replicate the fields that are populated from fact_relationship.
+# Detail schemas – Updated to match OpenAPI spec DetailBase definition
 # ---------------------------------------------------------------------------
 class DetailBase(BaseModel):
-    domainConceptId1: Optional[int] = Field(alias="domain_concept_id_1", default=None)
-    factId1: Optional[int] = Field(alias="fact_id_1", default=None)
-    domainConceptId2: Optional[int] = Field(alias="domain_concept_id_2", default=None)
-    factId2: Optional[int] = Field(alias="fact_id_2", default=None)
-    relationshipConceptId: Optional[int] = Field(alias="relationship_concept_id", default=None)
-    tableDisplayText: Optional[str] = None
+    code: Optional[str] = Field(None, example="20507-0")
+    display: Optional[str] = Field(None, example="Reagin Ab [Presence] in Serum by RPR")
+    startDate: Optional[str] = Field(None, example="2022-01-14T05:00:00Z")
+    endDate: Optional[str] = Field(None, example="2022-01-14T05:00:00Z")
+    system: Optional[str] = Field(None, example="LOINC")
+    tableDisplayText: Optional[str] = Field(None, example="Reagin Ab [Presence] in Serum by RPR | value")
 
     model_config = ConfigDict(
         from_attributes=True,
         populate_by_name=True,
-        alias_generator=lambda s: s,
     )
 
 class DetailUserData(DetailBase):
@@ -111,6 +108,7 @@ class DetailCondition(DetailBase):
 # DetailMeasurement schema
 # ---------------------------------------------------------------------------
 class DetailMeasurement(DetailBase):
+    date: Optional[str] = None
     rangeHigh: Optional[int] = None
     rangeLow: Optional[int] = None
     unit: Optional[str] = None
