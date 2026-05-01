@@ -636,12 +636,17 @@ async def _get_medication_detail(
             de.lot_number,
             de.quantity,
             de.refills,
+            c_drug.concept_code AS drug_code,
+            c_drug.concept_name AS drug_display,
+            c_drug.vocabulary_id AS drug_system,
             c_route.concept_code AS route_code,
             c_route.concept_name AS route_display,
             c_route.vocabulary_id AS route_system,
             de.sig,
             de.drug_exposure_start_date AS start_date
         FROM {registry_schema}.drug_exposure AS de
+        JOIN {VOCAB_SCHEMA}.concept AS c_drug
+            ON de.drug_concept_id = c_drug.concept_id
         LEFT JOIN {VOCAB_SCHEMA}.concept AS c_route
             ON de.route_concept_id = c_route.concept_id
         WHERE de.drug_exposure_id = :drug_exposure_id
@@ -651,16 +656,22 @@ async def _get_medication_detail(
     if not row:
         return None
         
+    table_display_text = f"{row[6]}" if row[6] else None
+    
     return DetailMedication(
         code=row[5],  # route_code
         display=row[6],  # route_display
         system=row[7],  # route_system
-        startDate=row[9].isoformat() if row[9] else None,
+        startDate=row[12].isoformat() if row[12] else None,
         daysSupply=row[1],
         lotNumber=row[2],
         quantity=row[3],
         refills=row[4],
-        sig=row[8],
+        route_code=row[8],
+        route_display=row[9],
+        route_system=row[10],
+        sig=row[11],
+        tableDisplayText=table_display_text,
     )
 
 
@@ -809,8 +820,8 @@ async def _get_measurement_detail(
             m.measurement_id,
             m.range_high,
             m.range_low,
-            m.unit_as_string,
-            m.value_as_string,
+            m.unit_concept_id,
+            m.value_source_value,
             m.value_as_number,
             m.operator_concept_id,
             m.measurement_date,
@@ -837,25 +848,26 @@ async def _get_measurement_detail(
     # Build tableDisplayText per requirements
     table_display_parts = []
     
+    measurement_value = None
+
     # Add value_as_concept_name if exists
     if row[9]:  # value_as_concept_name
-        table_display_parts.append(row[9])
-    
-    # Add value_as_number with operator concept name if exists
-    if row[5] is not None:  # value_as_number
+        table_display_parts.append(row[9])   
+    elif row[5] is not None:  # Add value_as_number with operator concept name if exists
         if row[11]:  # operator_concept_name
             table_display_parts.append(f"{row[11]} {row[5]}")
+            measurement_value = f"{row[11]} {row[5]}"
         else:
             table_display_parts.append(str(row[5]))
+            measurement_value = str(row[5])
         
         # Add unit if exists
-        if row[3]:  # unit_as_string
-            table_display_parts.append(row[3])
-    
-    # Add value_as_string if exists
-    if row[4]:  # value_as_string
+        if row[10]:  # unit_concept_name
+            table_display_parts.append(row[10])
+    elif row[4]:  # value_source_value
         table_display_parts.append(row[4])
-    
+        measurement_value = row[4]
+            
     table_display_text = " | ".join(table_display_parts) if table_display_parts else None
     
     # Determine display value
@@ -866,19 +878,21 @@ async def _get_measurement_detail(
         display_value = f"{row[11]} {row[5]}"
     elif row[5] is not None:  # value_as_number only
         display_value = str(row[5])
-    elif row[4]:  # value_as_string
+    elif row[4]:  # value_source_value
         display_value = row[4]
+    
+    # Get unit from unit concept name
+    unit_value = row[10] if row[10] else None
     
     return DetailMeasurement(
         code=None,  # Not applicable for measurement detail
+        date=row[7].isoformat() if row[7] else None,  # measurement_date
         display=display_value,
         system=None,  # Not applicable for measurement detail
-        startDate=row[7].isoformat() if row[7] else None,  # measurement_date
         endDate=None,  # Not applicable for measurement detail
         tableDisplayText=table_display_text,
         rangeHigh=row[1],  # range_high
         rangeLow=row[2],   # range_low
-        unit=row[3],       # unit_as_string
-        value=row[4],      # value_as_string
-        date=row[7].isoformat() if row[7] else None,  # measurement_date
+        unit=unit_value,   # unit_concept_name
+        value=measurement_value,      # value_source_value
     )
