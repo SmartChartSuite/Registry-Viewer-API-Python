@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 class Annotation(BaseModel):
-    annotationId: int = Field(alias="annotation_id")
+    annotationId: Optional[int] = Field(None, alias="annotation_id")
     date: datetime
     text: Optional[str] = None
 

@@ -6,6 +6,9 @@ from fastapi import FastAPI, Depends
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from app.security.deps import get_current_user
 from app.api.v1 import metadata, case_record
+from app.db.base import engine
+from sqlalchemy import text
+from app.config import DATA_SCHEMA, SCD_DATA_SCHEMA
 
 app = FastAPI(
     title="SMART-PACER Registry Viewer API",
