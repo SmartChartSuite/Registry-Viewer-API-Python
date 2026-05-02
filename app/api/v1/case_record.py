@@ -25,7 +25,9 @@ VOCAB_SCHEMA = os.getenv("VOCABULARY_SCHEMA")
 # The specification fixed this at 2_000_000_000.
 MIN_OBSERVATION_CONCEPT_ID = 2_000_000_000
 
-router = APIRouter()
+router = APIRouter(
+    tags=["case-record-api-controller"],
+)
 
 # ---------------------------------------------------------------------------
 # Utility: parse the caret (^) delimited observation.value_as_string
@@ -46,6 +48,8 @@ def parse_observation_value(raw: str) -> dict:
     offset = 1 if len(parts) > 3 else 0
     if offset:
         result["date"] = parts[0]
+    else:
+        result["value"] = parts[0]
 
     remaining = len(parts) - offset
     # Cases for system/code/display
@@ -82,15 +86,15 @@ async def fetch_details(
     registry_schema: str,
     content_ids: List[int],
 ) -> Dict[int, List[Union[DetailUserData, DetailMedication, DetailObservation, DetailNote, DetailCondition, DetailMeasurement]]]:
-    """Return a mapping content_id → list of detail objects based on domain_concept_id_2.
+    """Return a mapping content_id -> list of detail objects based on domain_concept_id_2.
 
     For each content_id, fetches related fact_relationship rows and maps them to appropriate detail schemas:
     - If no facts: fallback to DetailUserData with derivedValue as tableDisplayText
-    - domain_concept_id_2 = 13 → DetailMedication (drug_exposure + concept joins)
-    - domain_concept_id_2 = 19 → DetailCondition (condition_occurrence + concept join)
-    - domain_concept_id_2 = 27 → DetailObservation (observation + concept joins)
-    - domain_concept_id_2 = 21 → DetailMeasurement (measurement + concept joins)
-    - domain_concept_id_2 = 5085 → DetailNote (note + concept join)
+    - domain_concept_id_2 = 13 -> DetailMedication (drug_exposure + concept joins)
+    - domain_concept_id_2 = 19 -> DetailCondition (condition_occurrence + concept join)
+    - domain_concept_id_2 = 27 -> DetailObservation (observation + concept joins)
+    - domain_concept_id_2 = 21 -> DetailMeasurement (measurement + concept joins)
+    - domain_concept_id_2 = 5085 -> DetailNote (note + concept join)
     - Other values: skip
     """
     if not content_ids:
@@ -173,7 +177,7 @@ async def fetch_details(
             # Other domain_concept_id_2 values are skipped as per requirements
             
         mapping[content_id] = details
-        
+    
     return mapping
 
     # -------------------------------------------------------------------
@@ -195,6 +199,7 @@ async def fetch_details(
                 code=parsed.get("code"),
                 display=parsed.get("display"),
             )
+
         derived = Value(
             coding=coding,
             unit=parsed.get("unit"),
@@ -209,6 +214,7 @@ async def fetch_details(
             section=meta.get("section"),
             question=meta.get("question"),
             derivedValue=derived,
+            sourceValue=source_value,
             # flag, sourceValue, etc. can be added later if needed.
         )
         contents.append(content)
@@ -226,6 +232,10 @@ async def fetch_details(
             )
             content.details = [fallback]
         else:
+            # Override tableDisplayText for DetailNote instances with content's derived value
+            for detail in details:
+                if isinstance(detail, DetailNote):
+                    detail.tableDisplayText = content.derivedValue.value
             content.details = details
 
     # -------------------------------------------------------------------
@@ -359,10 +369,10 @@ async def get_case_record(
     obs_rows = obs_result.fetchall()
 
     if not obs_rows:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": 404, "message": "case not found"},
-        )
+         raise HTTPException(
+             status_code=404,
+             detail={"code": 404, "message": "case not found"},
+         )
 
     # -------------------------------------------------------------------
     # 5️⃣ Build Content objects
@@ -399,12 +409,20 @@ async def get_case_record(
         # Parse observation_source_value the same way as observation.value_as_string
         source_value_parsed = parse_observation_value(row[4])  # row[4] is observation_source_value
         source_value_coding = None
+
         if source_value_parsed.get("system") or source_value_parsed.get("code") or source_value_parsed.get("display"):
             source_value_coding = Coding(
                 system=source_value_parsed.get("system"),
                 code=source_value_parsed.get("code"),
                 display=source_value_parsed.get("display"),
             )
+
+        source_value = Value(
+            coding=source_value_coding,
+            unit=source_value_parsed.get("unit"),
+            value=source_value_parsed.get("value"),
+        )
+
         source_value = Value(
             coding=source_value_coding,
             unit=source_value_parsed.get("unit"),
@@ -436,6 +454,10 @@ async def get_case_record(
             )
             content.details = [fallback]
         else:
+            # Override tableDisplayText for DetailNote instances with content's derived value
+            for detail in details:
+                if isinstance(detail, DetailNote):
+                    detail.tableDisplayText = content.derivedValue.value
             content.details = details
 
     # -------------------------------------------------------------------
@@ -787,7 +809,9 @@ async def _get_note_detail(
             n.note_text,
             c.concept_code,
             c.concept_name,
-            c.vocabulary_id
+            c.vocabulary_id,
+            n.note_date,
+            n.note_datetime
         FROM {registry_schema}.note AS n
         JOIN {VOCAB_SCHEMA}.concept AS c
             ON n.note_type_concept_id = c.concept_id
@@ -797,13 +821,19 @@ async def _get_note_detail(
     row = result.fetchone()
     if not row:
         return None
+    
+    if row[6]:  # note_date
+        note_date = row[6].isoformat()
+    elif row[5]:  # note_datetime
+        note_date = row[5].isoformat()
+    else:
+        note_date = None
         
     return DetailNote(
         code=row[2],  # concept_code
         display=row[3],  # concept_name
         system=row[4],  # vocabulary_id
-        startDate=None,  # Not applicable for note detail
-        endDate=None,  # Not applicable for note detail
+        date=note_date,  # datetime or date
         tableDisplayText=row[1],  # note_text
         noteText=row[1],
     )

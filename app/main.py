@@ -5,7 +5,7 @@ load_dotenv()  # Load .env at startup
 from fastapi import FastAPI, Depends
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from app.security.deps import get_current_user
-from app.api.v1 import metadata, case_record
+from app.api.v1 import metadata, case_record, questions
 from app.db.base import engine
 from sqlalchemy import text
 from app.config import DATA_SCHEMA, SCD_DATA_SCHEMA
@@ -71,6 +71,7 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 # Include API routers
 app.include_router(metadata.router, dependencies=[Depends(get_current_user)])
 app.include_router(case_record.router, dependencies=[Depends(get_current_user)])
+app.include_router(questions.router, dependencies=[Depends(get_current_user)])
 
 # ---------------------------------------------------------------------------
 # Global exception handling – log unhandled errors and return safe JSON responses

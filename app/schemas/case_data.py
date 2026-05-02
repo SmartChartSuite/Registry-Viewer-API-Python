@@ -84,6 +84,7 @@ class DetailObservation(DetailBase):
 # DetailNote schema
 # ---------------------------------------------------------------------------
 class DetailNote(DetailBase):
+    date: Optional[str] = None
     noteText: Optional[str] = None
 
     model_config = ConfigDict(

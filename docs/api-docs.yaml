@@ -677,6 +677,10 @@ components:
         - $ref: '#/components/schemas/DetailBase'
         - type: object
           properties:
+            date:
+              type: string
+              format: date-time
+              example: '2022-01-14T05:00:00Z'
             noteText:
               type: string
               example: Reactive
