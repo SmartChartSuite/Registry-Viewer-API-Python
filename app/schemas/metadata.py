@@ -17,6 +17,17 @@ class Error(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class Status(BaseModel):
+    activatedDateTime: Optional[str] = None
+    caseStartedRunningDateTime: Optional[str] = None
+    code: Optional[str] = None
+    createdDateTime: Optional[str] = None
+    detail: Optional[str] = None
+    lastSuccessfulDateTime: Optional[str] = None
+    nextScheduledDateTime: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
 class Metadatas(BaseModel):
     count: int
     metadatas: List[Metadata]

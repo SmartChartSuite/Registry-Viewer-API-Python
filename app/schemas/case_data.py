@@ -152,3 +152,16 @@ class CaseData(BaseModel):
         from_attributes=True,
         populate_by_name=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Cases – represents a list of ModelCase objects
+# ---------------------------------------------------------------------------
+class Cases(BaseModel):
+    case: List[ModelCase] = Field(alias="cases")
+    count: int
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
