@@ -4,6 +4,12 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Need to import ModelCase for Cases and LlmResultData
+# We use TYPE_CHECKING or forward references if needed, 
+# but usually, these are defined in separate files.
+# I'll add ModelCase as a forward reference or just assume it's available via import.
+from app.schemas.model_case import ModelCase
+
 # ---------------------------------------------------------------------------
 # Basic coding representation – mirrors the OpenAPI Coding schema
 # ---------------------------------------------------------------------------
@@ -165,3 +171,15 @@ class Cases(BaseModel):
         from_attributes=True,
         populate_by_name=True,
     )
+
+# ---------------------------------------------------------------------------
+# LlmResultData – Response model for llm-query API
+# ---------------------------------------------------------------------------
+class LlmResultData(BaseModel):
+    query: str
+    queryType: str
+    interpretation: Optional[str] = None
+    images: Optional[List[str]] = Field(default_factory=list)
+    patients: List[ModelCase] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
