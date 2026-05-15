@@ -1,4 +1,0 @@
-2026-04-27 03:34:54 WARNING app.logging_config: Authentication failed: missing Authorization header from testclient
-2026-04-27 03:34:54 WARNING app.logging_config: GET /registry-viewer-api/case-record/syphilis – 401 Missing Authorization header
-2026-04-27 03:35:07 WARNING app.logging_config: GET /registry-viewer-api/case-record/syphilis – 404 {'code': 404, 'message': 'case not found'}
-2026-04-28 01:22:15 WARNING app.logging_config: PUT /registry-viewer-api/case-record/syphilis – 404 {'code': 404, 'message': 'case not found'}

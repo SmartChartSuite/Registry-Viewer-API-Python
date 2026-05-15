@@ -7,6 +7,7 @@ from app.db.base import get_async_session
 from app.schemas.question import Question
 from app.security.deps import get_current_user
 from app.schemas.metadata import Error
+from app.config import API_BASE_PATH
 
 # ---------------------------------------------------------------------------
 # Configuration helpers – read env vars (already present elsewhere)
@@ -23,7 +24,7 @@ router = APIRouter(
 # GET endpoint – retrieve questions for a section
 # ---------------------------------------------------------------------------
 @router.get(
-    "/registry-viewer-api/questions/{registry}",
+    f"/{API_BASE_PATH}/questions/{{registry}}",
     response_model=list[Question],
     responses={
         200: {"description": "list of questions"},

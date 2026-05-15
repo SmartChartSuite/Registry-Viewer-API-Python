@@ -14,3 +14,6 @@ METADATA_TABLE: str = os.getenv("METADATA_TABLE", "metadata")
 VOCABULARY_SCHEMA: str = os.getenv("VOCABULARY_SCHEMA", "")
 DATA_SCHEMA: str = os.getenv("DATA_SCHEMA", "")
 SCD_DATA_SCHEMA: str = os.getenv("SCD_DATA_SCHEMA", "")
+
+# API base path (used in router prefixes and Docker root-path)
+API_BASE_PATH: str = os.getenv("API_BASE_PATH", "registry-viewer-api")

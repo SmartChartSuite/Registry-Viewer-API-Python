@@ -12,6 +12,7 @@ from app.schemas.model_case import ModelCase
 from app.schemas.case_data import LlmResultData
 from app.security.deps import get_current_user
 from app.schemas.metadata import Error
+from app.config import API_BASE_PATH
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ async def get_model_case_by_person_id(db: AsyncSession, person_id: int, registry
 # GET endpoint – llm query
 # ---------------------------------------------------------------------------
 @router.get(
-    "/registry-viewer-api/llm-query/{registry}",
+    f"/{API_BASE_PATH}/llm-query/{{registry}}",
     response_model=LlmResultData,
     responses={
         200: {"description": "AI-generated query results"},

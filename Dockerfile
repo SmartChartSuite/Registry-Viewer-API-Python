@@ -17,5 +17,5 @@ COPY . .
 EXPOSE 8000
 
 # Run the application with root-path set for the required URL path
-# This ensures all routes are prefixed with /registry-viewer-api
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--root-path", "/registry-viewer-api"]
+# This ensures all routes are prefixed with the value of API_BASE_PATH environment variable
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

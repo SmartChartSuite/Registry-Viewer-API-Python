@@ -10,6 +10,7 @@ from app.schemas.model_case import ModelCase
 from app.schemas.case_data import Cases
 from app.security.deps import get_current_user
 from app.schemas.metadata import Error, Status
+from app.config import API_BASE_PATH
 
 # ---------------------------------------------------------------------------
 # Configuration helpers – read env vars (already present elsewhere)
@@ -26,7 +27,7 @@ router = APIRouter(
 # GET endpoint – search cases
 # ---------------------------------------------------------------------------
 @router.get(
-    "/registry-viewer-api/search-cases/{registry}",
+    f"/{API_BASE_PATH}/search-cases/{{registry}}",
     response_model=Cases,
     responses={
         200: {"description": "Search results matching criteria"},
@@ -71,7 +72,7 @@ async def search_cases(
             "family_name", "given1_name", "given2_name", "gender_concept_name", 
             "address_1", "address_2", "city", "state", "zip", "status"
         ]
-
+    
     # -------------------------------------------------------------------
     # 3️⃣ Build the search query
     # -------------------------------------------------------------------

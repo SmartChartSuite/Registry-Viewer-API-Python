@@ -12,6 +12,7 @@ from app.schemas.manual_case_data import ManualCaseData
 from app.schemas.user_flag_annotation_manual_data import UserFlagAnnotationManualData
 from app.schemas.metadata import Error
 from app.security.deps import get_current_user
+from app.config import API_BASE_PATH
 
 # ---------------------------------------------------------------------------
 # Configuration helpers – read env vars (already present elsewhere)
@@ -180,80 +181,11 @@ async def fetch_details(
     
     return mapping
 
-    # -------------------------------------------------------------------
-    # 5️⃣ Build Content objects
-    # -------------------------------------------------------------------
-    contents: List[Content] = []
-    content_ids: List[int] = []
-    for row in obs_rows:
-        observation_id = row[0]
-        content_ids.append(observation_id)
-        raw_value = row[4]  # value_as_string
-        parsed = parse_observation_value(raw_value)
-
-        # Build derivedValue (Value model)
-        coding = None
-        if parsed.get("system") or parsed.get("code") or parsed.get("display"):
-            coding = Coding(
-                system=parsed.get("system"),
-                code=parsed.get("code"),
-                display=parsed.get("display"),
-            )
-
-        derived = Value(
-            coding=coding,
-            unit=parsed.get("unit"),
-            value=parsed.get("value"),
-        )
-
-        meta = concept_to_meta.get(row[2], {})  # row[2] is observation_concept_id
-        content = Content(
-            contentId=observation_id,
-            date=parsed.get("date"),
-            category=meta.get("category"),
-            section=meta.get("section"),
-            question=meta.get("question"),
-            derivedValue=derived,
-            sourceValue=source_value,
-            # flag, sourceValue, etc. can be added later if needed.
-        )
-        contents.append(content)
-
-    # -------------------------------------------------------------------
-    # 6️⃣ Fetch DetailUserData for each content (batched)
-    # -------------------------------------------------------------------
-    details_map = await fetch_details(db, registry, content_ids)
-    for content in contents:
-        details = details_map.get(content.contentId)
-        if not details:
-            # Fallback – use derived value as tableDisplayText
-            fallback = DetailUserData(
-                tableDisplayText=content.derivedValue.value
-            )
-            content.details = [fallback]
-        else:
-            # Override tableDisplayText for DetailNote instances with content's derived value
-            for detail in details:
-                if isinstance(detail, DetailNote):
-                    detail.tableDisplayText = content.derivedValue.value
-            content.details = details
-
-    # -------------------------------------------------------------------
-    # 7️⃣ Assemble final response
-    # -------------------------------------------------------------------
-    case_data = CaseData(
-        caseId=caseId,
-        contents=contents,
-        count=len(contents),
-    )
-    return case_data
-
-
 # ---------------------------------------------------------------------------
 # GET endpoint – retrieve case record
 # ---------------------------------------------------------------------------
 @router.get(
-    "/registry-viewer-api/case-record/{registry}",
+    f"/{API_BASE_PATH}/case-record/{{registry}}",
     response_model=CaseData,
     responses={
         200: {"description": "search results matching criteria"},
@@ -475,7 +407,7 @@ async def get_case_record(
 # PUT endpoint – upsert ManualCaseData into observation table
 # ---------------------------------------------------------------------------
 @router.put(
-    "/registry-viewer-api/case-record/{registry}",
+    f"/{API_BASE_PATH}/case-record/{{registry}}",
     # No response body – only HTTP status
     response_model=None,
     responses={

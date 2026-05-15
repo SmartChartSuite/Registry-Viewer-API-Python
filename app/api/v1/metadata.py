@@ -5,11 +5,11 @@ from app.db.base import get_async_session
 from app.db.models import Metadata as MetadataModel
 from app.schemas.metadata import Metadata as MetadataSchema, Metadatas
 from app.security.deps import require_scope, require_metadata_scope, get_current_user
+from app.config import API_BASE_PATH
 
 router = APIRouter(
-    prefix="/registry-viewer-api/metadata",
+    prefix=f"/{API_BASE_PATH}/metadata",
     tags=["metadata-api-controller"],
-
 )
 
 # READ endpoint – requires read:metadata scope
