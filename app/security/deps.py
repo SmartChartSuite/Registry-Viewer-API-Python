@@ -24,6 +24,7 @@ async def get_current_user(
     """
     # Prefer Bearer token if supplied
     if bearer:
+        print(f"DEBUG: Bearer token received: {bearer.credentials[:50]}...")  # Debug
         payload = await verify_jwt(bearer.credentials)
         scopes = set(payload.get("scope", "").split())
         return {"auth_method": "bearer", "scopes": scopes, "claims": payload}
