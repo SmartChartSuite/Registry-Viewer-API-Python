@@ -75,13 +75,19 @@ async def verify_jwt(token: str) -> Dict:
         )
 
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+    my_domain = os.getenv("AUTH_DOMAIN", "http://localhost:8080/")
+    if my_domain.startswith("http://") or my_domain.startswith("https://"):
+        issuer = my_domain
+    else:
+        issuer = f"https://{my_domain}"
+
     try:
         payload = jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],
             audience=os.getenv("AUTH_AUDIENCE"),
-            issuer=f"https://{os.getenv('AUTH_DOMAIN')}/",
+            issuer=issuer,
             options={"verify_aud": bool(os.getenv('AUTH_AUDIENCE'))},
         )
         print(f"DEBUG verify_jwt: Token verified successfully. Payload: {payload}")  # Debug
