@@ -6,5 +6,5 @@ aiosqlite
 python-dotenv
 pyyaml>=6.0
 httpx
-PyJWT
+PyJWT[crypto]
 greenlet
