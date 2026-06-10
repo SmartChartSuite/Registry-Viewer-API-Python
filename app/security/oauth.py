@@ -13,10 +13,19 @@ def get_jwks_url() -> str:
     """Return the JWKS endpoint URL for the configured Auth0 tenant.
     Allows override via OAUTH2_JWKS_URL env var for testing.
     """
-    return os.getenv(
-        "OAUTH2_JWKS_URL",
-        f"https://{os.getenv('AUTH_DOMAIN')}/.well-known/jwks.json",
-    )
+    # well-known/jwks.json is the standard endpoint for Auth0 and many other OIDC providers, so we default to that if not explicitly set
+    my_domain = os.getenv("AUTH_DOMAIN", "http://localhost:8080/")
+    if my_domain.startswith("http://") or my_domain.startswith("https://"):
+        wellKnownUrl = my_domain
+    else:
+        wellKnownUrl = f"https://{my_domain}"
+    
+    if (my_domain.endswith("/")):
+        wellKnownUrl = wellKnownUrl+".well-known/jwks.json"
+    else: 
+        wellKnownUrl = wellKnownUrl+"/.well-known/jwks.json"
+
+    return os.getenv("OAUTH2_JWKS_URL", wellKnownUrl)
 
 async def fetch_jwks() -> Dict:
     """Fetch the JWKS from Auth and cache it for the lifetime of the process."""
