@@ -8,51 +8,36 @@ from app.security.deps import get_current_user
 from app.api.v1 import metadata, case_record, questions, search_cases, llm_query
 from app.db.base import engine
 from sqlalchemy import text
-from app.config import DATA_SCHEMA, SCD_DATA_SCHEMA
+from app.config import DATA_SCHEMA, SCD_DATA_SCHEMA, API_BASE_PATH
 
 app = FastAPI(
     title="SMART-PACER Registry Viewer API",
     version="v1.11.1",
     description="FastAPI implementation of the SMART-PACER Registry Viewer API",
+    docs_url=f"/{API_BASE_PATH}/docs",
+    redoc_url=f"/{API_BASE_PATH}/redoc",
+    openapi_url=f"/{API_BASE_PATH}/openapi.json",
 )
 
 # ---------------------------------------------------------------------------
-# OpenAPI spec serving at root ('/') – respects Accept header.
+# Redirect root to docs endpoint
 # ---------------------------------------------------------------------------
-from pathlib import Path
-from fastapi import Request, Response
-from fastapi.responses import PlainTextResponse, JSONResponse
-import yaml
-
-_openapi_yaml: str = ""
-_openapi_json: dict = {}
-
-@app.on_event("startup")
-async def _load_openapi_spec() -> None:
-    """Load the OpenAPI YAML file once at startup.
-    Also parse it into JSON for fast JSON responses.
-    """
-    spec_path = Path(__file__).resolve().parents[1] / "docs" / "api-docs.yaml"
-    global _openapi_yaml, _openapi_json
-    _openapi_yaml = spec_path.read_text(encoding="utf-8")
-    _openapi_json = yaml.safe_load(_openapi_yaml) or {}
+from fastapi.responses import RedirectResponse
 
 @app.get("/", include_in_schema=False)
-async def root(request: Request) -> Response:
-    """Return the OpenAPI specification.
-    * YAML is returned by default (Content-Type: application/vnd.oai.openapi).
-    * If the client sends `Accept: application/json`, JSON is returned.
-    """
-    # Lazy‑load in case startup event didn't run (e.g., during tests)
-    global _openapi_yaml, _openapi_json
-    if not _openapi_yaml:
-        spec_path = Path(__file__).resolve().parents[1] / "docs" / "api-docs.yaml"
-        _openapi_yaml = spec_path.read_text(encoding="utf-8")
-        _openapi_json = yaml.safe_load(_openapi_yaml) or {}
-    accept = request.headers.get("accept", "").lower()
-    if "application/json" in accept:
-        return JSONResponse(content=_openapi_json, media_type="application/json")
-    return PlainTextResponse(content=_openapi_yaml, media_type="application/vnd.oai.openapi")
+async def root() -> RedirectResponse:
+    """Redirect root endpoint to the docs endpoint."""
+    return RedirectResponse(url=f"/{API_BASE_PATH}/docs", status_code=307)
+
+# ---------------------------------------------------------------------------
+# Redirect API base path to docs endpoint
+# ---------------------------------------------------------------------------
+@app.get(f"/{API_BASE_PATH}/", include_in_schema=False)
+async def api_base_path_redirect() -> RedirectResponse:
+    """Redirect API base path to the docs endpoint."""
+    return RedirectResponse(url=f"/{API_BASE_PATH}/docs", status_code=307)
+
+
 
 # OAuth2 security scheme (exposed in generated OpenAPI)
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
